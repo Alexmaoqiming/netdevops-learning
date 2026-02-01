@@ -2,8 +2,8 @@ import paramiko
 import time
 
 ip = '192.168.1.41'
-username = 'yunwei'
-password = 'lanfei_ocsic'
+username = 'sshadmin'
+password = 'cisco'
 enable_password = 'ocsic'
 
 # 创建paramiko的SSH客户端对象
