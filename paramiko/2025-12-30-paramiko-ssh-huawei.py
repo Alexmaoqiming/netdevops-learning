@@ -2,8 +2,8 @@ import paramiko
 import time
 
 ip = '192.168.1.110'
-username = 'yunwei'
-password = 'lanfei_242'
+username = 'sshadmin'
+password = 'huawei'
 
 # 创建paramiko的SSH对象
 ssh_client = paramiko.SSHClient()
@@ -30,3 +30,4 @@ output = command.recv(65535)
 print(output.decode("ascii"))
 
 ssh_client.close()
+
