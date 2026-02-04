@@ -13,6 +13,7 @@ import pwinput  # 需要先 pip install pwinput
 - 如果检测失败，默认当作 Cisco 处理并警告
 """
 
+
 def detect_device_type(initial_output: str) -> str:
     """根据初始 banner 判断设备类型"""
     lower_text = initial_output.lower()
@@ -21,8 +22,8 @@ def detect_device_type(initial_output: str) -> str:
     # Cisco 关键词或默认
     if any(word in lower_text for word in ['cisco', 'ios', 'xe', 'catalyst', 'nexus', '>', '#']):
         return 'cisco'
-    print("警告：无法自动识别设备类型，默认使用 Cisco 配置。如为华为设备，请检查权限或手动指定。")
-    return 'cisco'
+    print("警告：无法自动识别设备类型，默认使用 Huawei 配置。如为华为设备，请检查权限或手动指定。")
+    return 'huawei'
 
 
 def network_ssh_execute(
@@ -34,7 +35,7 @@ def network_ssh_execute(
         timeout_per_cmd: float = 15.0,
         privilege_password: Optional[str] = None,
         privilege_level: str = "3"
-) -> Dict[str, str]:
+) -> tuple[str, Dict[str, str]]:
     """
     连接网络设备（Cisco 或 Huawei），执行命令列表，返回 {命令: 清理后输出}
     """
@@ -146,7 +147,7 @@ def network_ssh_execute(
             chan.close()
         ssh.close()
 
-    return outputs
+    return device_type, outputs
 
 
 # ─── 主程序 ────────────────────────────────────────────────
@@ -180,16 +181,27 @@ if __name__ == '__main__':
             print("已取消特權模式，將以普通模式執行")
             privilege_password = None
 
+    # 先执行一次，获取设备类型type
+    before_device_type, before_result = network_ssh_execute(
+        host=HOST,
+        username=username,
+        password=password,
+        commands=[],
+        port=PORT,
+        privilege_password=privilege_password,
+        privilege_level=privilege_level
+    )
+
     # 根据设备类型自动适配的命令列表
     commands = [
-        "show version" if "cisco" in HOST.lower() else "display version",
-        "show ip interface brief" if "cisco" in HOST.lower() else "display ip interface brief",
-        "show running-config | include hostname" if "cisco" in HOST.lower() else "display current-configuration | include sysname",
+        "show version" if "cisco" in before_device_type else "display version",
+        "show ip interface brief" if "cisco" in before_device_type else "display ip interface brief",
+        "show running-config | include hostname" if "cisco" in before_device_type else "display current-configuration | include sysname",
     ]
 
     print("\n開始執行命令...\n")
 
-    result = network_ssh_execute(
+    device_type, result = network_ssh_execute(
         host=HOST,
         username=username,
         password=password,
