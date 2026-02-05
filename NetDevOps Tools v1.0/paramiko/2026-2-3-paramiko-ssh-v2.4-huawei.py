@@ -3,23 +3,24 @@ import time
 import re
 from typing import List, Dict, Optional
 
-
-def cisco_ssh_execute(
+"""
+V2.4版本改进的华为版本
+"""
+def huawei_vrp_ssh_execute(
         host: str,
         username: str,
         password: str,
         commands: List[str],
         port: int = 22,
-        timeout_per_cmd: float = 15.0,
-        enable_password: Optional[str] = None
+        timeout_per_cmd: float = 12.0,
+        super_password: Optional[str] = None   # 部分设备需要 super
 ) -> Dict[str, str]:
     """
-    使用 paramiko 连接 Cisco 设备并执行多条命令
-    返回 {命令: 清理后的输出} 的字典
+    paramiko 连接华为 VRP 设备并批量执行命令
     """
     outputs = {}
     ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # 测试用；生产改 RejectPolicy + known_hosts
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # 生产环境建议改用 known_hosts
 
     try:
         ssh.connect(
@@ -32,22 +33,22 @@ def cisco_ssh_execute(
             timeout=10
         )
 
-        chan = ssh.invoke_shell(width=200, height=500)  # 加大缓冲避免截断
+        chan = ssh.invoke_shell(width=200, height=500)
         chan.settimeout(2.0)
 
         time.sleep(1.0)
-        _ = chan.recv(8192)  # 丢弃 banner / motd
+        _ = chan.recv(8192)  # 丢弃登录信息
 
-        # 关闭分页（必须）
-        chan.send("terminal length 0\n")
+        # 关闭分页（华为常用命令）
+        chan.send("screen-length 0 temporary\n")
         time.sleep(0.5)
         _ = chan.recv(4096)
 
-        # 如果需要进入特权模式
-        if enable_password:
-            chan.send("enable\n")
+        # 如果需要进入系统视图或 super 权限
+        if super_password:
+            chan.send("super\n")
             time.sleep(0.4)
-            chan.send(enable_password + "\n")
+            chan.send(super_password + "\n")
             time.sleep(0.6)
             _ = chan.recv(4096)
 
@@ -60,38 +61,38 @@ def cisco_ssh_execute(
             print(f"发送: {cmd}")
 
             output = ""
-            start_time = time.time()
+            start = time.time()
 
-            while time.time() - start_time < timeout_per_cmd:
+            while time.time() - start < timeout_per_cmd:
                 if chan.recv_ready():
                     chunk = chan.recv(8192).decode('utf-8', errors='replace')
                     output += chunk
 
-                # 检测是否回到提示符（# 或 > 结尾）
-                if re.search(r'[>#]\s*$', output, re.MULTILINE | re.DOTALL):
+                # 华为提示符通常是 < > 或 [ ]
+                if re.search(r'[\<\[][\w\.-]+[\>\]]\s*$', output, re.MULTILINE | re.DOTALL):
                     break
 
-                time.sleep(0.08)
+                time.sleep(0.07)
 
             # 清理输出
             lines = output.splitlines()
             cleaned = []
-            echo_skipped = False
+            echo_found = False
 
             for line in lines:
                 stripped = line.rstrip()
-                if not echo_skipped and (cmd in stripped or stripped.startswith(cmd)):
-                    echo_skipped = True
+                if not echo_found and (cmd in stripped or stripped.lstrip().startswith(cmd)):
+                    echo_found = True
                     continue
-                if re.match(r'^[\w\.-]+[>#]\s*$', stripped):  # 跳过提示符行
+                if re.match(r'^[\<\[][\w\.-]+[\>\]]\s*$', stripped):
                     continue
-                if stripped:  # 去掉纯空行
+                if stripped:
                     cleaned.append(stripped)
 
-            clean_output = "\n".join(cleaned).strip()
-            outputs[cmd] = clean_output
+            clean_text = "\n".join(cleaned).strip()
+            outputs[cmd] = clean_text
 
-            print(f"结果 ({cmd}):\n{clean_output}\n{'─'*70}")
+            print(f"结果 ({cmd}):\n{clean_text}\n{'─'*70}")
 
     except Exception as e:
         print(f"连接/执行失败 {host}: {e}")
@@ -105,14 +106,14 @@ def cisco_ssh_execute(
 
 # ─── 使用示例 ────────────────────────────────────────
 if __name__ == '__main__':
-    result = cisco_ssh_execute(
-        host="192.168.93.100",
+    result = huawei_vrp_ssh_execute(
+        host="192.168.93.102",
         username="sshadmin",
-        password="lanfei_242",
-        enable_password="ocsic",   # 如果需要 enable 密码，填入；否则 None
+        password="Lanfei_212",
+        super_password=None,           # 如需填 super 密码
         commands=[
-            "show version",
-            "show ip interface brief",
-            "show running-config | include hostname"
+            "display version",
+            "display ip interface brief",
+            "display current-configuration | include sysname"
         ]
     )
