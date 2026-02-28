@@ -97,7 +97,7 @@ def network_ssh_execute(
             password=password,
             look_for_keys=False,
             allow_agent=False,
-            timeout=10
+            timeout=20
         )
 
         chan = ssh.invoke_shell(width=200, height=500)
